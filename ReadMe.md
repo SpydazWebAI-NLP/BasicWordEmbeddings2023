@@ -1,4 +1,4 @@
-﻿# WordEmbeddings Model
+﻿# Basic WordEmbeddings Model (VB.NET)
 
 The WordEmbeddings model is a VB.NET implementation of the Word Embeddings technique, which represents words as dense vectors in a continuous vector space. This model allows you to train word embeddings on a given corpus and perform various operations such as calculating similarity between words, discovering collocations, and generating training data.
 
