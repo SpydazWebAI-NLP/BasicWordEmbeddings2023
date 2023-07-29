@@ -23,11 +23,12 @@ The WordEmbeddings model is a VB.NET implementation of the Word Embeddings techn
    
 ```vb
    Dim model As New WordEmbeddings(embeddingSize:=100, learningRate:=0.01, windowSize:=5)
+```
+
+### Train the model using a corpus of text:
 
 
-## Train the model using a corpus of text:
-
-   ```vb
+```vb
 
 Dim corpus As String() = {
     "united states is a country.", "England is a country",
@@ -38,31 +39,42 @@ Dim corpus As String() = {
     "dogs love eating pizza."
 }
 model.Train(corpus)
-Perform various operations on the trained model:
+```
+
+
+### Perform various operations on the trained model:
 
 ## Calculate PMI matrix:
-   ```vb
+
+```vb
 
 Dim pmiMatrix As Dictionary(Of String, Dictionary(Of String, Double)) = model.CalculatePMI()
-Discover collocations:
-   ```vb
+```
+
+### Discover collocations:
+```vb
 
 Dim words As String() = {"united", "states", "kingdom", "airlines"}
 Dim collocations As List(Of Tuple(Of String, String)) = model.DiscoverCollocations(words, threshold:=1)
+```
 ##  most similar words:
-   ```vb
+```vb
 
 Dim similarWords As List(Of String) = model.GetMostSimilarWords("dog", topK:=3)
-Save and load the trained model for future use:
+```
 
-   ```vb
+### Save and load the trained model for future use:
+
+```vb
 
 ' Save the model
 model.SaveModel("path/to/save/model.json")
 
 ' Load the model
 Dim loadedModel As WordEmbeddings = WordEmbeddings.LoadModel("path/to/saved/model.json")
-Refer to the code and function documentation for more advanced usage and customization options.
+```
+
+#### Refer to the code and function documentation for more advanced usage and customization options.
 
 ## Dependencies
 The WordEmbeddings model requires the following dependencies:
