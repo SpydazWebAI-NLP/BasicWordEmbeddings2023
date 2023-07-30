@@ -13,6 +13,8 @@ The WordEmbeddings model is a VB.NET implementation of the Word Embeddings techn
 
 ## Usage
 
+
+
 1. Install the necessary dependencies (e.g., .NET framework) for running VB.NET applications.
 
 2. Clone or download the repository to your local machine.
