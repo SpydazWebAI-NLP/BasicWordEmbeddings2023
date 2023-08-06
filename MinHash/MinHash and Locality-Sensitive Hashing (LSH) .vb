@@ -5,8 +5,8 @@ Namespace MinHashAndLSH
             Dim lshIndex As New LSHIndex(numHashTables:=3, numHashFunctionsPerTable:=2)
 
             ' Create some sample articles
-            Dim article1 As New Document("The Art of Baking: Mastering the Perfect Chocolate Cake", 0)
-            Dim article2 As New Document("Exploring Exotic Cuisines: A Culinary Adventure in Southeast Asia", 1)
+            Dim article1 As New Document("The Art of Baking: Mastering the Perfect Sweet Chocolate Cake", 0)
+            Dim article2 As New Document("A Journey Exploring Exotic Cuisines: A Culinary Adventure in Southeast Asia", 1)
             Dim article3 As New Document("Nutrition for Optimal Brain Health: Foods that Boost Cognitive Function", 2)
             Dim article4 As New Document("The Rise of Artificial Intelligence: A Game-Changer in the Tech World", 3)
             Dim article5 As New Document("Introduction to Quantum Computing: Unraveling the Power of Qubits", 4)

@@ -4,7 +4,6 @@ Imports System.Windows.Forms
 Imports WordEmbeddings.Word2Vectors.Factory
 Imports WordEmbeddings.Word2Vectors.Models
 Namespace Word2Vectors
-
     Namespace Factory
         Public MustInherit Class WordEmbeddingsModel
 
@@ -192,40 +191,6 @@ Namespace Word2Vectors
 
                 Return dataGridView
             End Function
-            Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Integer))) As DataGridView
-                Dim dataGridView As New DataGridView()
-                dataGridView.Dock = DockStyle.Fill
-                dataGridView.AutoGenerateColumns = False
-                dataGridView.AllowUserToAddRows = False
-
-                ' Add columns to the DataGridView
-                Dim wordColumn As New DataGridViewTextBoxColumn()
-                wordColumn.HeaderText = "Word"
-                wordColumn.DataPropertyName = "Word"
-                dataGridView.Columns.Add(wordColumn)
-
-                For Each contextWord As String In matrix.Keys
-                    Dim contextColumn As New DataGridViewTextBoxColumn()
-                    contextColumn.HeaderText = contextWord
-                    contextColumn.DataPropertyName = contextWord
-                    dataGridView.Columns.Add(contextColumn)
-                Next
-
-                ' Populate the DataGridView with the matrix data
-                For Each word As String In matrix.Keys
-                    Dim rowValues As New List(Of Integer)
-                    rowValues.Add(word)
-
-                    For Each contextWord As String In matrix.Keys
-                        Dim count As Object = If(matrix(word).ContainsKey(contextWord), matrix(word)(contextWord), 0)
-                        rowValues.Add(count)
-                    Next
-
-                    dataGridView.Rows.Add(rowValues.ToArray())
-                Next
-
-                Return dataGridView
-            End Function
             Public Class WordListReader
                 Private wordList As List(Of String)
 
@@ -264,6 +229,207 @@ Namespace Word2Vectors
                     ' Rest of your code...
                 End Sub
 
+
+            End Class
+            Public Class PMI
+                Public cooccurrenceMatrix As Dictionary(Of String, Dictionary(Of String, Double))
+                Public vocabulary As Dictionary(Of String, Integer)
+                Private wordToIndex As Dictionary(Of String, Integer)
+                Private indexToWord As Dictionary(Of Integer, String)
+                Private embeddingSize As Integer = embeddingMatrix.Length
+                Private embeddingMatrix As Double(,)
+
+                Public Sub New(vocabulary As Dictionary(Of String, Integer))
+                    If vocabulary Is Nothing Then
+                        Throw New ArgumentNullException(NameOf(vocabulary))
+                    End If
+
+                    Me.vocabulary = vocabulary
+                End Sub
+
+                ''' <summary>
+                ''' Discovers collocations among the specified words based on the trained model.
+                ''' </summary>
+                ''' <param name="words">The words to discover collocations for.</param>
+                ''' <param name="threshold">The similarity threshold for collocation discovery.</param>
+                ''' <returns>A list of collocations (word pairs) that meet the threshold.</returns>
+                Public Function DiscoverCollocations(words As String(), threshold As Double) As List(Of Tuple(Of String, String))
+                    Dim collocations As New List(Of Tuple(Of String, String))
+
+                    For i As Integer = 0 To words.Length - 2
+                        For j As Integer = i + 1 To words.Length - 1
+                            Dim word1 As String = words(i)
+                            Dim word2 As String = words(j)
+
+                            If vocabulary.Keys.Contains(word1) AndAlso vocabulary.Keys.Contains(word2) Then
+                                Dim vector1 As Double() = GetEmbedding(wordToIndex(word1))
+                                Dim vector2 As Double() = GetEmbedding(wordToIndex(word2))
+                                Dim similarity As Double = CalculateSimilarity(vector1, vector2)
+
+                                If similarity >= threshold Then
+                                    collocations.Add(Tuple.Create(word1, word2))
+                                End If
+                            End If
+                        Next
+                    Next
+
+                    Return collocations
+                End Function
+                Private Function CalculateSimilarity(vectorA As Double(), vectorB As Double()) As Double
+                    Dim dotProduct As Double = 0
+                    Dim magnitudeA As Double = 0
+                    Dim magnitudeB As Double = 0
+
+                    For i As Integer = 0 To vectorA.Length - 1
+                        dotProduct += vectorA(i) * vectorB(i)
+                        magnitudeA += vectorA(i) * vectorA(i)
+                        magnitudeB += vectorB(i) * vectorB(i)
+                    Next
+
+                    If magnitudeA <> 0 AndAlso magnitudeB <> 0 Then
+                        Return dotProduct / (Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB))
+                    Else
+                        Return 0
+                    End If
+                End Function
+
+                Private Sub InitializeEmbeddings()
+                    Dim vocabSize As Integer = vocabulary.Count
+                    embeddingMatrix = New Double(vocabSize - 1, embeddingSize - 1) {}
+
+                    Dim random As New Random()
+                    For i As Integer = 0 To vocabSize - 1
+                        For j As Integer = 0 To embeddingSize - 1
+                            embeddingMatrix(i, j) = random.NextDouble()
+                        Next
+                    Next
+                End Sub
+                Private Function GetEmbedding(index As Integer) As Double()
+                    If indexToWord.ContainsKey(index) Then
+                        Dim vector(embeddingSize - 1) As Double
+                        For i As Integer = 0 To embeddingSize - 1
+                            vector(i) = embeddingMatrix(index, i)
+                        Next
+                        Return vector
+                    Else
+                        Return Nothing
+                    End If
+                End Function
+                ''' <summary>
+                ''' Calculates the Pointwise Mutual Information (PMI) matrix for the trained model.
+                ''' </summary>
+                ''' <returns>A dictionary representing the PMI matrix.</returns>
+                Public Function CalculatePMI() As Dictionary(Of String, Dictionary(Of String, Double))
+                    Dim pmiMatrix As New Dictionary(Of String, Dictionary(Of String, Double))
+
+                    Dim totalCooccurrences As Double = GetTotalCooccurrences()
+
+                    For Each targetWord In cooccurrenceMatrix.Keys
+                        Dim targetOccurrences As Double = GetTotalOccurrences(targetWord)
+
+                        If Not pmiMatrix.ContainsKey(targetWord) Then
+                            pmiMatrix(targetWord) = New Dictionary(Of String, Double)
+                        End If
+
+                        For Each contextWord In cooccurrenceMatrix(targetWord).Keys
+                            Dim contextOccurrences As Double = GetTotalOccurrences(contextWord)
+                            Dim cooccurrences As Double = cooccurrenceMatrix(targetWord)(contextWord)
+
+                            Dim pmiValue As Double = Math.Log((cooccurrences * totalCooccurrences) / (targetOccurrences * contextOccurrences))
+                            pmiMatrix(targetWord)(contextWord) = pmiValue
+                        Next
+                    Next
+
+                    Return pmiMatrix
+                End Function
+                Private Function GetTotalCooccurrences() As Double
+                    Dim total As Double = 0
+
+                    For Each targetWord In cooccurrenceMatrix.Keys
+                        For Each cooccurrenceValue In cooccurrenceMatrix(targetWord).Values
+                            total += cooccurrenceValue
+                        Next
+                    Next
+
+                    Return total
+                End Function
+
+                Private Function GetTotalOccurrences(word As String) As Double
+                    Dim total As Double = 0
+
+                    If cooccurrenceMatrix.ContainsKey(word) Then
+                        total = cooccurrenceMatrix(word).Values.Sum()
+                    End If
+
+                    Return total
+                End Function
+                Private Function GenerateCooccurrenceMatrix(corpus As String(), windowSize As Integer) As Dictionary(Of String, Dictionary(Of String, Double))
+                    Dim matrix As New Dictionary(Of String, Dictionary(Of String, Double))
+
+                    For Each sentence In corpus
+                        Dim words As String() = sentence.Split(" "c)
+                        Dim length As Integer = words.Length
+
+                        For i As Integer = 0 To length - 1
+                            Dim targetWord As String = words(i)
+
+                            If Not matrix.ContainsKey(targetWord) Then
+                                matrix(targetWord) = New Dictionary(Of String, Double)
+                            End If
+
+                            For j As Integer = Math.Max(0, i - windowSize) To Math.Min(length - 1, i + windowSize)
+                                If i = j Then
+                                    Continue For
+                                End If
+
+                                Dim contextWord As String = words(j)
+                                Dim distance As Double = 1 / Math.Abs(i - j)
+
+                                If matrix(targetWord).ContainsKey(contextWord) Then
+                                    matrix(targetWord)(contextWord) += distance
+                                Else
+                                    matrix(targetWord)(contextWord) = distance
+                                End If
+                            Next
+                        Next
+                    Next
+
+                    Return matrix
+                End Function
+                Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Integer))) As DataGridView
+                    Dim dataGridView As New DataGridView()
+                    dataGridView.Dock = DockStyle.Fill
+                    dataGridView.AutoGenerateColumns = False
+                    dataGridView.AllowUserToAddRows = False
+
+                    ' Add columns to the DataGridView
+                    Dim wordColumn As New DataGridViewTextBoxColumn()
+                    wordColumn.HeaderText = "Word"
+                    wordColumn.DataPropertyName = "Word"
+                    dataGridView.Columns.Add(wordColumn)
+
+                    For Each contextWord As String In matrix.Keys
+                        Dim contextColumn As New DataGridViewTextBoxColumn()
+                        contextColumn.HeaderText = contextWord
+                        contextColumn.DataPropertyName = contextWord
+                        dataGridView.Columns.Add(contextColumn)
+                    Next
+
+                    ' Populate the DataGridView with the matrix data
+                    For Each word As String In matrix.Keys
+                        Dim rowValues As New List(Of Integer)
+                        rowValues.Add(word)
+
+                        For Each contextWord As String In matrix.Keys
+                            Dim count As Object = If(matrix(word).ContainsKey(contextWord), matrix(word)(contextWord), 0)
+                            rowValues.Add(count)
+                        Next
+
+                        dataGridView.Rows.Add(rowValues.ToArray())
+                    Next
+
+                    Return dataGridView
+                End Function
 
             End Class
 
@@ -1691,7 +1857,6 @@ Namespace Word2Vectors
         End Class
 
     End Namespace
-
     Namespace UseCases
         Namespace WordEmbeddingsUseCase
             Public Class WordEmbeddingsExample
@@ -1767,6 +1932,5 @@ Namespace Word2Vectors
             End Class
         End Namespace
     End Namespace
-
 End Namespace
 
