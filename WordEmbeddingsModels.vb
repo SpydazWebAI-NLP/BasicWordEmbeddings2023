@@ -1,117 +1,405 @@
 ﻿Imports System.Drawing
+Imports System.Drawing.Imaging
 Imports System.IO
+Imports System.Numerics
 Imports System.Windows.Forms
-Imports WordEmbeddings.Word2Vectors.Factory
-Imports WordEmbeddings.Word2Vectors.Models
-Namespace Word2Vectors
-    Namespace Factory
-        Public MustInherit Class WordEmbeddingsModel
+Imports Embeddings.Factory
+Imports Embeddings.Models.Text
+Imports MathNet.Numerics.IntegralTransforms
 
-            ' A simple vocabulary for demonstration purposes.
-            Private iVocabulary As New List(Of String) From {"apple", "orange", "banana", "grape", "cherry"}
-            Public Property Vocabulary As List(Of String)
-                Get
-                    Return iVocabulary
-                End Get
-                Set(value As List(Of String))
-                    iVocabulary = value
-                End Set
-            End Property
-            ' Word embeddings dictionary to store the learned word vectors.
-            Public WordEmbeddings As New WordEmbedding
+Namespace Factory
+    Public MustInherit Class WordEmbeddingsModel
 
-            ' Hyperparameters for training.
-            Public EmbeddingSize As Integer = 50 ' Size of word vectors.
-            Public WindowSize As Integer = 2 ' Context window size.
+        ' A simple vocabulary for demonstration purposes.
+        Private iVocabulary As New List(Of String) From {"apple", "orange", "banana", "grape", "cherry"}
+        Public Property Vocabulary As List(Of String)
+            Get
+                Return iVocabulary
+            End Get
+            Set(value As List(Of String))
+                iVocabulary = value
+            End Set
+        End Property
+        ' Word embeddings dictionary to store the learned word vectors.
+        Public WordEmbeddings As New WordEmbedding
 
-            Public LearningRate As Double = 0.01 ' Learning rate for gradient descent.
-            Public NumEpochs As Integer = 1000 ' Number of training epochs.
+        ' Hyperparameters for training.
+        Public EmbeddingSize As Integer = 50 ' Size of word vectors.
+        Public WindowSize As Integer = 2 ' Context window size.
 
-            ' Random number generator for initialization.
-            Public Shared ReadOnly Rand As New Random()
-            Public MustOverride Sub Train()
-            Public MustOverride Sub Train(corpus As List(Of List(Of String)))
-            Public Sub New(ByRef model As WordEmbeddingsModel)
-                iVocabulary = model.Vocabulary
-                WordEmbeddings = model.WordEmbeddings
-                EmbeddingSize = model.EmbeddingSize
-                WindowSize = model.WindowSize
-                LearningRate = model.LearningRate
-                NumEpochs = model.NumEpochs
+        Public LearningRate As Double = 0.01 ' Learning rate for gradient descent.
+        Public NumEpochs As Integer = 1000 ' Number of training epochs.
+
+        ' Random number generator for initialization.
+        Public Shared ReadOnly Rand As New Random()
+        Public MustOverride Sub Train()
+        Public MustOverride Sub Train(corpus As List(Of List(Of String)))
+        Public Sub New(ByRef model As WordEmbeddingsModel)
+            iVocabulary = model.Vocabulary
+            WordEmbeddings = model.WordEmbeddings
+            EmbeddingSize = model.EmbeddingSize
+            WindowSize = model.WindowSize
+            LearningRate = model.LearningRate
+            NumEpochs = model.NumEpochs
+        End Sub
+        Public Sub New(ByRef Vocabulary As List(Of String))
+            iVocabulary = Vocabulary
+        End Sub
+        Public Function ExportModel() As WordEmbeddingsModel
+            Return Me
+        End Function
+        Public Sub SetTrainingParameters(ByRef Embeddingsize As Integer,
+                                     ByRef WindowSize As Integer,
+                                     ByRef LearningRate As Double, ByRef Epochs As Integer)
+            Me.EmbeddingSize = Embeddingsize
+            Me.WindowSize = WindowSize
+            Me.LearningRate = LearningRate
+            Me.NumEpochs = Epochs
+        End Sub
+        ' WordEmbedding class to store word vectors and handle operations on word embeddings.
+        Public Class WordEmbedding
+            Public embeddings As Dictionary(Of String, Double())
+
+            Public Sub New()
+                Me.embeddings = New Dictionary(Of String, Double())()
             End Sub
-            Public Sub New(ByRef Vocabulary As List(Of String))
-                iVocabulary = Vocabulary
+
+            Public Sub Add(word As String, vector As Double())
+                embeddings(word) = vector
             End Sub
-            Public Function ExportModel() As WordEmbeddingsModel
-                Return Me
-            End Function
-            Public Sub SetTrainingParameters(ByRef Embeddingsize As Integer,
-                                         ByRef WindowSize As Integer,
-                                         ByRef LearningRate As Double, ByRef Epochs As Integer)
-                Me.EmbeddingSize = Embeddingsize
-                Me.WindowSize = WindowSize
-                Me.LearningRate = LearningRate
-                Me.NumEpochs = Epochs
-            End Sub
-            ' WordEmbedding class to store word vectors and handle operations on word embeddings.
-            Public Class WordEmbedding
-                Public embeddings As Dictionary(Of String, Double())
 
-                Public Sub New()
-                    Me.embeddings = New Dictionary(Of String, Double())()
-                End Sub
-
-                Public Sub Add(word As String, vector As Double())
-                    embeddings(word) = vector
-                End Sub
-
-                Public Function GetVector(word As String) As Double()
-                    Return embeddings(word)
-                End Function
-
-                ' Implement other operations as needed for word embeddings.
-                ' E.g., similarity, word lookup, etc.
-            End Class
-            Public Function ComputeDotProduct(vec1 As Double(), vec2 As Double()) As Double
-                Return Enumerable.Range(0, EmbeddingSize).Sum(Function(i) vec1(i) * vec2(i))
+            Public Function GetVector(word As String) As Double()
+                Return embeddings(word)
             End Function
 
-            Public Function Sigmoid(x As Double) As Double
-                Return 1.0 / (1.0 + Math.Exp(-x))
-            End Function
+            ' Implement other operations as needed for word embeddings.
+            ' E.g., similarity, word lookup, etc.
+        End Class
+        Public Function ComputeDotProduct(vec1 As Double(), vec2 As Double()) As Double
+            Return Enumerable.Range(0, EmbeddingSize).Sum(Function(i) vec1(i) * vec2(i))
+        End Function
 
-            ''' <summary>
-            ''' Cosine Similarity(A, B) = (A dot B) / (||A|| * ||B||)
-            '''  where:
-            '''  A And B are the word vectors of two words.
-            '''  A dot B Is the dot product Of the two vectors.
-            '''  ||A|| And ||B|| are the magnitudes (Euclidean norms) of the vectors.
-            '''  The cosine similarity ranges from -1 To 1, where 1 indicates the highest similarity, 0 indicates no similarity, And -1 indicates the highest dissimilarity.
-            ''' </summary>
-            ''' <param name="word1"></param>
-            ''' <param name="word2"></param>
-            ''' <param name="wordEmbeddings"></param>
-            ''' <returns></returns>
-            Public Function CosineSimilarity(word1 As String, word2 As String, wordEmbeddings As WordEmbedding) As Double
-                Dim vector1 As Double() = wordEmbeddings.GetVector(word1)
-                Dim vector2 As Double() = wordEmbeddings.GetVector(word2)
+        Public Function Sigmoid(x As Double) As Double
+            Return 1.0 / (1.0 + Math.Exp(-x))
+        End Function
 
-                ' Calculate the dot product of the two vectors.
-                Dim dotProduct As Double = 0
-                For i As Integer = 0 To vector1.Length - 1
-                    dotProduct += vector1(i) * vector2(i)
+        ''' <summary>
+        ''' Cosine Similarity(A, B) = (A dot B) / (||A|| * ||B||)
+        '''  where:
+        '''  A And B are the word vectors of two words.
+        '''  A dot B Is the dot product Of the two vectors.
+        '''  ||A|| And ||B|| are the magnitudes (Euclidean norms) of the vectors.
+        '''  The cosine similarity ranges from -1 To 1, where 1 indicates the highest similarity, 0 indicates no similarity, And -1 indicates the highest dissimilarity.
+        ''' </summary>
+        ''' <param name="word1"></param>
+        ''' <param name="word2"></param>
+        ''' <param name="wordEmbeddings"></param>
+        ''' <returns></returns>
+        Public Function CosineSimilarity(word1 As String, word2 As String, wordEmbeddings As WordEmbedding) As Double
+            Dim vector1 As Double() = wordEmbeddings.GetVector(word1)
+            Dim vector2 As Double() = wordEmbeddings.GetVector(word2)
+
+            ' Calculate the dot product of the two vectors.
+            Dim dotProduct As Double = 0
+            For i As Integer = 0 To vector1.Length - 1
+                dotProduct += vector1(i) * vector2(i)
+            Next
+
+            ' Calculate the magnitudes of the vectors.
+            Dim magnitude1 As Double = Math.Sqrt(vector1.Sum(Function(x) x * x))
+            Dim magnitude2 As Double = Math.Sqrt(vector2.Sum(Function(x) x * x))
+
+            ' Calculate the cosine similarity.
+            Dim similarity As Double = dotProduct / (magnitude1 * magnitude2)
+
+            Return similarity
+        End Function
+        Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Double))) As DataGridView
+            Dim dataGridView As New DataGridView()
+            dataGridView.Dock = DockStyle.Fill
+            dataGridView.AutoGenerateColumns = False
+            dataGridView.AllowUserToAddRows = False
+
+            ' Add columns to the DataGridView
+            Dim wordColumn As New DataGridViewTextBoxColumn()
+            wordColumn.HeaderText = "Word"
+            wordColumn.DataPropertyName = "Word"
+            dataGridView.Columns.Add(wordColumn)
+
+            For Each contextWord As String In matrix.Keys
+                Dim contextColumn As New DataGridViewTextBoxColumn()
+                contextColumn.HeaderText = contextWord
+                contextColumn.DataPropertyName = contextWord
+                dataGridView.Columns.Add(contextColumn)
+            Next
+
+            ' Populate the DataGridView with the matrix data
+            For Each word As String In matrix.Keys
+                Dim rowValues As New List(Of Object)
+                rowValues.Add(word)
+
+                For Each contextWord As String In matrix.Keys
+                    Dim count As Object = If(matrix(word).ContainsKey(contextWord), matrix(word)(contextWord), 0)
+                    rowValues.Add(count)
                 Next
 
-                ' Calculate the magnitudes of the vectors.
-                Dim magnitude1 As Double = Math.Sqrt(vector1.Sum(Function(x) x * x))
-                Dim magnitude2 As Double = Math.Sqrt(vector2.Sum(Function(x) x * x))
+                dataGridView.Rows.Add(rowValues.ToArray())
+            Next
 
-                ' Calculate the cosine similarity.
-                Dim similarity As Double = dotProduct / (magnitude1 * magnitude2)
+            Return dataGridView
+        End Function
+        Public Sub DisplayEmbeddingsModel()
+            Dim dgv = DisplayMatrix(WordEmbeddings.embeddings)
 
-                Return similarity
+            ' Create a form and add the DataGridView to it
+            Dim kform As New Form
+            kform.Text = "Embedding Matrix"
+            kform.Size = New Size(800, 600)
+            kform.Controls.Add(dgv)
+
+            ' Display the form
+            Application.Run(kform)
+        End Sub
+        Public Function DisplayMatrix(matrix As Dictionary(Of String, Double())) As DataGridView
+            Dim dataGridView As New DataGridView()
+            dataGridView.Dock = DockStyle.Fill
+            dataGridView.AutoGenerateColumns = False
+            dataGridView.AllowUserToAddRows = False
+
+            ' Add columns to the DataGridView
+            Dim wordColumn As New DataGridViewTextBoxColumn()
+            wordColumn.HeaderText = "Word"
+            wordColumn.DataPropertyName = "Word"
+            dataGridView.Columns.Add(wordColumn)
+
+            For Each contextWord As String In matrix.Keys
+                Dim contextColumn As New DataGridViewTextBoxColumn()
+                contextColumn.HeaderText = contextWord
+                contextColumn.DataPropertyName = contextWord
+                dataGridView.Columns.Add(contextColumn)
+            Next
+
+            ' Populate the DataGridView with the matrix data
+            For Each word As String In matrix.Keys
+                Dim rowValues As New List(Of Object)()
+                rowValues.Add(word)
+
+                For Each contextWord As String In matrix.Keys
+                    Dim count As Integer = If(matrix.ContainsKey(contextWord), matrix(word)(contextWord), 0)
+                    rowValues.Add(count)
+                Next
+
+                dataGridView.Rows.Add(rowValues.ToArray())
+            Next
+
+            Return dataGridView
+        End Function
+        Public Class WordListReader
+            Private wordList As List(Of String)
+
+            Public Sub New(filePath As String)
+                wordList = New List(Of String)()
+                ReadWordList(filePath)
+            End Sub
+
+            Private Sub ReadWordList(filePath As String)
+                Using reader As New StreamReader(filePath)
+                    While Not reader.EndOfStream
+                        Dim line As String = reader.ReadLine()
+                        If Not String.IsNullOrEmpty(line) Then
+                            wordList.Add(line.Trim.ToLower)
+                        End If
+                    End While
+                End Using
+            End Sub
+
+            Public Function GetWords() As List(Of String)
+                Return wordList
             End Function
-            Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Double))) As DataGridView
+            ' Usage Example:
+            Public Shared Sub Main()
+                ' Assuming you have a wordlist file named 'words.txt' in the same directory
+                Dim corpusRoot As String = "."
+                Dim wordlistPath As String = Path.Combine(corpusRoot, "wordlist.txt")
+
+                Dim wordlistReader As New WordListReader(wordlistPath)
+                Dim words As List(Of String) = wordlistReader.GetWords()
+
+                For Each word As String In words
+                    Console.WriteLine(word)
+                Next
+                Console.ReadLine()
+                ' Rest of your code...
+            End Sub
+
+
+        End Class
+        Public Class PMI
+            Public cooccurrenceMatrix As Dictionary(Of String, Dictionary(Of String, Double))
+            Public vocabulary As Dictionary(Of String, Integer)
+            Private wordToIndex As Dictionary(Of String, Integer)
+            Private indexToWord As Dictionary(Of Integer, String)
+            Private embeddingSize As Integer = embeddingMatrix.Length
+            Private embeddingMatrix As Double(,)
+
+            Public Sub New(vocabulary As Dictionary(Of String, Integer))
+                If vocabulary Is Nothing Then
+                    Throw New ArgumentNullException(NameOf(vocabulary))
+                End If
+
+                Me.vocabulary = vocabulary
+            End Sub
+
+            ''' <summary>
+            ''' Discovers collocations among the specified words based on the trained model.
+            ''' </summary>
+            ''' <param name="words">The words to discover collocations for.</param>
+            ''' <param name="threshold">The similarity threshold for collocation discovery.</param>
+            ''' <returns>A list of collocations (word pairs) that meet the threshold.</returns>
+            Public Function DiscoverCollocations(words As String(), threshold As Double) As List(Of Tuple(Of String, String))
+                Dim collocations As New List(Of Tuple(Of String, String))
+
+                For i As Integer = 0 To words.Length - 2
+                    For j As Integer = i + 1 To words.Length - 1
+                        Dim word1 As String = words(i)
+                        Dim word2 As String = words(j)
+
+                        If vocabulary.Keys.Contains(word1) AndAlso vocabulary.Keys.Contains(word2) Then
+                            Dim vector1 As Double() = GetEmbedding(wordToIndex(word1))
+                            Dim vector2 As Double() = GetEmbedding(wordToIndex(word2))
+                            Dim similarity As Double = CalculateSimilarity(vector1, vector2)
+
+                            If similarity >= threshold Then
+                                collocations.Add(Tuple.Create(word1, word2))
+                            End If
+                        End If
+                    Next
+                Next
+
+                Return collocations
+            End Function
+            Private Function CalculateSimilarity(vectorA As Double(), vectorB As Double()) As Double
+                Dim dotProduct As Double = 0
+                Dim magnitudeA As Double = 0
+                Dim magnitudeB As Double = 0
+
+                For i As Integer = 0 To vectorA.Length - 1
+                    dotProduct += vectorA(i) * vectorB(i)
+                    magnitudeA += vectorA(i) * vectorA(i)
+                    magnitudeB += vectorB(i) * vectorB(i)
+                Next
+
+                If magnitudeA <> 0 AndAlso magnitudeB <> 0 Then
+                    Return dotProduct / (Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB))
+                Else
+                    Return 0
+                End If
+            End Function
+
+            Private Sub InitializeEmbeddings()
+                Dim vocabSize As Integer = vocabulary.Count
+                embeddingMatrix = New Double(vocabSize - 1, embeddingSize - 1) {}
+
+                Dim random As New Random()
+                For i As Integer = 0 To vocabSize - 1
+                    For j As Integer = 0 To embeddingSize - 1
+                        embeddingMatrix(i, j) = random.NextDouble()
+                    Next
+                Next
+            End Sub
+            Private Function GetEmbedding(index As Integer) As Double()
+                If indexToWord.ContainsKey(index) Then
+                    Dim vector(embeddingSize - 1) As Double
+                    For i As Integer = 0 To embeddingSize - 1
+                        vector(i) = embeddingMatrix(index, i)
+                    Next
+                    Return vector
+                Else
+                    Return Nothing
+                End If
+            End Function
+            ''' <summary>
+            ''' Calculates the Pointwise Mutual Information (PMI) matrix for the trained model.
+            ''' </summary>
+            ''' <returns>A dictionary representing the PMI matrix.</returns>
+            Public Function CalculatePMI() As Dictionary(Of String, Dictionary(Of String, Double))
+                Dim pmiMatrix As New Dictionary(Of String, Dictionary(Of String, Double))
+
+                Dim totalCooccurrences As Double = GetTotalCooccurrences()
+
+                For Each targetWord In cooccurrenceMatrix.Keys
+                    Dim targetOccurrences As Double = GetTotalOccurrences(targetWord)
+
+                    If Not pmiMatrix.ContainsKey(targetWord) Then
+                        pmiMatrix(targetWord) = New Dictionary(Of String, Double)
+                    End If
+
+                    For Each contextWord In cooccurrenceMatrix(targetWord).Keys
+                        Dim contextOccurrences As Double = GetTotalOccurrences(contextWord)
+                        Dim cooccurrences As Double = cooccurrenceMatrix(targetWord)(contextWord)
+
+                        Dim pmiValue As Double = Math.Log((cooccurrences * totalCooccurrences) / (targetOccurrences * contextOccurrences))
+                        pmiMatrix(targetWord)(contextWord) = pmiValue
+                    Next
+                Next
+
+                Return pmiMatrix
+            End Function
+            Private Function GetTotalCooccurrences() As Double
+                Dim total As Double = 0
+
+                For Each targetWord In cooccurrenceMatrix.Keys
+                    For Each cooccurrenceValue In cooccurrenceMatrix(targetWord).Values
+                        total += cooccurrenceValue
+                    Next
+                Next
+
+                Return total
+            End Function
+
+            Private Function GetTotalOccurrences(word As String) As Double
+                Dim total As Double = 0
+
+                If cooccurrenceMatrix.ContainsKey(word) Then
+                    total = cooccurrenceMatrix(word).Values.Sum()
+                End If
+
+                Return total
+            End Function
+            Private Function GenerateCooccurrenceMatrix(corpus As String(), windowSize As Integer) As Dictionary(Of String, Dictionary(Of String, Double))
+                Dim matrix As New Dictionary(Of String, Dictionary(Of String, Double))
+
+                For Each sentence In corpus
+                    Dim words As String() = sentence.Split(" "c)
+                    Dim length As Integer = words.Length
+
+                    For i As Integer = 0 To length - 1
+                        Dim targetWord As String = words(i)
+
+                        If Not matrix.ContainsKey(targetWord) Then
+                            matrix(targetWord) = New Dictionary(Of String, Double)
+                        End If
+
+                        For j As Integer = Math.Max(0, i - windowSize) To Math.Min(length - 1, i + windowSize)
+                            If i = j Then
+                                Continue For
+                            End If
+
+                            Dim contextWord As String = words(j)
+                            Dim distance As Double = 1 / Math.Abs(i - j)
+
+                            If matrix(targetWord).ContainsKey(contextWord) Then
+                                matrix(targetWord)(contextWord) += distance
+                            Else
+                                matrix(targetWord)(contextWord) = distance
+                            End If
+                        Next
+                    Next
+                Next
+
+                Return matrix
+            End Function
+            Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Integer))) As DataGridView
                 Dim dataGridView As New DataGridView()
                 dataGridView.Dock = DockStyle.Fill
                 dataGridView.AutoGenerateColumns = False
@@ -132,7 +420,7 @@ Namespace Word2Vectors
 
                 ' Populate the DataGridView with the matrix data
                 For Each word As String In matrix.Keys
-                    Dim rowValues As New List(Of Object)
+                    Dim rowValues As New List(Of Integer)
                     rowValues.Add(word)
 
                     For Each contextWord As String In matrix.Keys
@@ -145,474 +433,189 @@ Namespace Word2Vectors
 
                 Return dataGridView
             End Function
-            Public Sub DisplayEmbeddingsModel()
-                Dim dgv = DisplayMatrix(WordEmbeddings.embeddings)
-
-                ' Create a form and add the DataGridView to it
-                Dim kform As New Form
-                kform.Text = "Embedding Matrix"
-                kform.Size = New Size(800, 600)
-                kform.Controls.Add(dgv)
-
-                ' Display the form
-                Application.Run(kform)
-            End Sub
-            Public Function DisplayMatrix(matrix As Dictionary(Of String, Double())) As DataGridView
-                Dim dataGridView As New DataGridView()
-                dataGridView.Dock = DockStyle.Fill
-                dataGridView.AutoGenerateColumns = False
-                dataGridView.AllowUserToAddRows = False
-
-                ' Add columns to the DataGridView
-                Dim wordColumn As New DataGridViewTextBoxColumn()
-                wordColumn.HeaderText = "Word"
-                wordColumn.DataPropertyName = "Word"
-                dataGridView.Columns.Add(wordColumn)
-
-                For Each contextWord As String In matrix.Keys
-                    Dim contextColumn As New DataGridViewTextBoxColumn()
-                    contextColumn.HeaderText = contextWord
-                    contextColumn.DataPropertyName = contextWord
-                    dataGridView.Columns.Add(contextColumn)
-                Next
-
-                ' Populate the DataGridView with the matrix data
-                For Each word As String In matrix.Keys
-                    Dim rowValues As New List(Of Object)()
-                    rowValues.Add(word)
-
-                    For Each contextWord As String In matrix.Keys
-                        Dim count As Integer = If(matrix.ContainsKey(contextWord), matrix(word)(contextWord), 0)
-                        rowValues.Add(count)
-                    Next
-
-                    dataGridView.Rows.Add(rowValues.ToArray())
-                Next
-
-                Return dataGridView
-            End Function
-            Public Class WordListReader
-                Private wordList As List(Of String)
-
-                Public Sub New(filePath As String)
-                    wordList = New List(Of String)()
-                    ReadWordList(filePath)
-                End Sub
-
-                Private Sub ReadWordList(filePath As String)
-                    Using reader As New StreamReader(filePath)
-                        While Not reader.EndOfStream
-                            Dim line As String = reader.ReadLine()
-                            If Not String.IsNullOrEmpty(line) Then
-                                wordList.Add(line.Trim.ToLower)
-                            End If
-                        End While
-                    End Using
-                End Sub
-
-                Public Function GetWords() As List(Of String)
-                    Return wordList
-                End Function
-                ' Usage Example:
-                Public Shared Sub Main()
-                    ' Assuming you have a wordlist file named 'words.txt' in the same directory
-                    Dim corpusRoot As String = "."
-                    Dim wordlistPath As String = Path.Combine(corpusRoot, "wordlist.txt")
-
-                    Dim wordlistReader As New WordListReader(wordlistPath)
-                    Dim words As List(Of String) = wordlistReader.GetWords()
-
-                    For Each word As String In words
-                        Console.WriteLine(word)
-                    Next
-                    Console.ReadLine()
-                    ' Rest of your code...
-                End Sub
-
-
-            End Class
-            Public Class PMI
-                Public cooccurrenceMatrix As Dictionary(Of String, Dictionary(Of String, Double))
-                Public vocabulary As Dictionary(Of String, Integer)
-                Private wordToIndex As Dictionary(Of String, Integer)
-                Private indexToWord As Dictionary(Of Integer, String)
-                Private embeddingSize As Integer = embeddingMatrix.Length
-                Private embeddingMatrix As Double(,)
-
-                Public Sub New(vocabulary As Dictionary(Of String, Integer))
-                    If vocabulary Is Nothing Then
-                        Throw New ArgumentNullException(NameOf(vocabulary))
-                    End If
-
-                    Me.vocabulary = vocabulary
-                End Sub
-
-                ''' <summary>
-                ''' Discovers collocations among the specified words based on the trained model.
-                ''' </summary>
-                ''' <param name="words">The words to discover collocations for.</param>
-                ''' <param name="threshold">The similarity threshold for collocation discovery.</param>
-                ''' <returns>A list of collocations (word pairs) that meet the threshold.</returns>
-                Public Function DiscoverCollocations(words As String(), threshold As Double) As List(Of Tuple(Of String, String))
-                    Dim collocations As New List(Of Tuple(Of String, String))
-
-                    For i As Integer = 0 To words.Length - 2
-                        For j As Integer = i + 1 To words.Length - 1
-                            Dim word1 As String = words(i)
-                            Dim word2 As String = words(j)
-
-                            If vocabulary.Keys.Contains(word1) AndAlso vocabulary.Keys.Contains(word2) Then
-                                Dim vector1 As Double() = GetEmbedding(wordToIndex(word1))
-                                Dim vector2 As Double() = GetEmbedding(wordToIndex(word2))
-                                Dim similarity As Double = CalculateSimilarity(vector1, vector2)
-
-                                If similarity >= threshold Then
-                                    collocations.Add(Tuple.Create(word1, word2))
-                                End If
-                            End If
-                        Next
-                    Next
-
-                    Return collocations
-                End Function
-                Private Function CalculateSimilarity(vectorA As Double(), vectorB As Double()) As Double
-                    Dim dotProduct As Double = 0
-                    Dim magnitudeA As Double = 0
-                    Dim magnitudeB As Double = 0
-
-                    For i As Integer = 0 To vectorA.Length - 1
-                        dotProduct += vectorA(i) * vectorB(i)
-                        magnitudeA += vectorA(i) * vectorA(i)
-                        magnitudeB += vectorB(i) * vectorB(i)
-                    Next
-
-                    If magnitudeA <> 0 AndAlso magnitudeB <> 0 Then
-                        Return dotProduct / (Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB))
-                    Else
-                        Return 0
-                    End If
-                End Function
-
-                Private Sub InitializeEmbeddings()
-                    Dim vocabSize As Integer = vocabulary.Count
-                    embeddingMatrix = New Double(vocabSize - 1, embeddingSize - 1) {}
-
-                    Dim random As New Random()
-                    For i As Integer = 0 To vocabSize - 1
-                        For j As Integer = 0 To embeddingSize - 1
-                            embeddingMatrix(i, j) = random.NextDouble()
-                        Next
-                    Next
-                End Sub
-                Private Function GetEmbedding(index As Integer) As Double()
-                    If indexToWord.ContainsKey(index) Then
-                        Dim vector(embeddingSize - 1) As Double
-                        For i As Integer = 0 To embeddingSize - 1
-                            vector(i) = embeddingMatrix(index, i)
-                        Next
-                        Return vector
-                    Else
-                        Return Nothing
-                    End If
-                End Function
-                ''' <summary>
-                ''' Calculates the Pointwise Mutual Information (PMI) matrix for the trained model.
-                ''' </summary>
-                ''' <returns>A dictionary representing the PMI matrix.</returns>
-                Public Function CalculatePMI() As Dictionary(Of String, Dictionary(Of String, Double))
-                    Dim pmiMatrix As New Dictionary(Of String, Dictionary(Of String, Double))
-
-                    Dim totalCooccurrences As Double = GetTotalCooccurrences()
-
-                    For Each targetWord In cooccurrenceMatrix.Keys
-                        Dim targetOccurrences As Double = GetTotalOccurrences(targetWord)
-
-                        If Not pmiMatrix.ContainsKey(targetWord) Then
-                            pmiMatrix(targetWord) = New Dictionary(Of String, Double)
-                        End If
-
-                        For Each contextWord In cooccurrenceMatrix(targetWord).Keys
-                            Dim contextOccurrences As Double = GetTotalOccurrences(contextWord)
-                            Dim cooccurrences As Double = cooccurrenceMatrix(targetWord)(contextWord)
-
-                            Dim pmiValue As Double = Math.Log((cooccurrences * totalCooccurrences) / (targetOccurrences * contextOccurrences))
-                            pmiMatrix(targetWord)(contextWord) = pmiValue
-                        Next
-                    Next
-
-                    Return pmiMatrix
-                End Function
-                Private Function GetTotalCooccurrences() As Double
-                    Dim total As Double = 0
-
-                    For Each targetWord In cooccurrenceMatrix.Keys
-                        For Each cooccurrenceValue In cooccurrenceMatrix(targetWord).Values
-                            total += cooccurrenceValue
-                        Next
-                    Next
-
-                    Return total
-                End Function
-
-                Private Function GetTotalOccurrences(word As String) As Double
-                    Dim total As Double = 0
-
-                    If cooccurrenceMatrix.ContainsKey(word) Then
-                        total = cooccurrenceMatrix(word).Values.Sum()
-                    End If
-
-                    Return total
-                End Function
-                Private Function GenerateCooccurrenceMatrix(corpus As String(), windowSize As Integer) As Dictionary(Of String, Dictionary(Of String, Double))
-                    Dim matrix As New Dictionary(Of String, Dictionary(Of String, Double))
-
-                    For Each sentence In corpus
-                        Dim words As String() = sentence.Split(" "c)
-                        Dim length As Integer = words.Length
-
-                        For i As Integer = 0 To length - 1
-                            Dim targetWord As String = words(i)
-
-                            If Not matrix.ContainsKey(targetWord) Then
-                                matrix(targetWord) = New Dictionary(Of String, Double)
-                            End If
-
-                            For j As Integer = Math.Max(0, i - windowSize) To Math.Min(length - 1, i + windowSize)
-                                If i = j Then
-                                    Continue For
-                                End If
-
-                                Dim contextWord As String = words(j)
-                                Dim distance As Double = 1 / Math.Abs(i - j)
-
-                                If matrix(targetWord).ContainsKey(contextWord) Then
-                                    matrix(targetWord)(contextWord) += distance
-                                Else
-                                    matrix(targetWord)(contextWord) = distance
-                                End If
-                            Next
-                        Next
-                    Next
-
-                    Return matrix
-                End Function
-                Public Function DisplayMatrix(matrix As Dictionary(Of String, Dictionary(Of String, Integer))) As DataGridView
-                    Dim dataGridView As New DataGridView()
-                    dataGridView.Dock = DockStyle.Fill
-                    dataGridView.AutoGenerateColumns = False
-                    dataGridView.AllowUserToAddRows = False
-
-                    ' Add columns to the DataGridView
-                    Dim wordColumn As New DataGridViewTextBoxColumn()
-                    wordColumn.HeaderText = "Word"
-                    wordColumn.DataPropertyName = "Word"
-                    dataGridView.Columns.Add(wordColumn)
-
-                    For Each contextWord As String In matrix.Keys
-                        Dim contextColumn As New DataGridViewTextBoxColumn()
-                        contextColumn.HeaderText = contextWord
-                        contextColumn.DataPropertyName = contextWord
-                        dataGridView.Columns.Add(contextColumn)
-                    Next
-
-                    ' Populate the DataGridView with the matrix data
-                    For Each word As String In matrix.Keys
-                        Dim rowValues As New List(Of Integer)
-                        rowValues.Add(word)
-
-                        For Each contextWord As String In matrix.Keys
-                            Dim count As Object = If(matrix(word).ContainsKey(contextWord), matrix(word)(contextWord), 0)
-                            rowValues.Add(count)
-                        Next
-
-                        dataGridView.Rows.Add(rowValues.ToArray())
-                    Next
-
-                    Return dataGridView
-                End Function
-
-            End Class
 
         End Class
 
-        ''' <summary>
-        ''' One possible way to combine the approaches is by using a two-step training process:
-        '''  Pre-training Using Skip-gram With Negative Sampling:
-        '''   In this step, 
-        '''    you can pre-train the word embeddings using the skip-gram model 
-        '''    with negative sampling on a large dataset Or a diverse corpus. 
-        '''    This step allows you to efficiently learn word embeddings 
-        '''    in a computationally efficient 
-        '''    manner while capturing semantic relationships between words.
-        '''  Fine-tuning using Hierarchical Softmax:
-        '''   After pre-training the word embeddings, 
-        '''    you can perform fine-tuning Using the hierarchical softmax technique. 
-        '''    During the fine-tuning Step, 
-        '''    you can use a smaller dataset 
-        '''   Or a more domain-specific corpus 
-        '''    To train the model Using hierarchical softmax. 
-        '''    This Step enables you To refine the word embeddings 
-        '''    And make them more accurate And context-specific.
-        ''' </summary>
-        Public Class HybridWordEmbeddingsModel
-            Inherits WordEmbeddingsModel
+    End Class
 
-            Public Sub New(ByRef model As WordEmbeddingsModel)
-                MyBase.New(model)
-            End Sub
+    ''' <summary>
+    ''' One possible way to combine the approaches is by using a two-step training process:
+    '''  Pre-training Using Skip-gram With Negative Sampling:
+    '''   In this step, 
+    '''    you can pre-train the word embeddings using the skip-gram model 
+    '''    with negative sampling on a large dataset Or a diverse corpus. 
+    '''    This step allows you to efficiently learn word embeddings 
+    '''    in a computationally efficient 
+    '''    manner while capturing semantic relationships between words.
+    '''  Fine-tuning using Hierarchical Softmax:
+    '''   After pre-training the word embeddings, 
+    '''    you can perform fine-tuning Using the hierarchical softmax technique. 
+    '''    During the fine-tuning Step, 
+    '''    you can use a smaller dataset 
+    '''   Or a more domain-specific corpus 
+    '''    To train the model Using hierarchical softmax. 
+    '''    This Step enables you To refine the word embeddings 
+    '''    And make them more accurate And context-specific.
+    ''' </summary>
+    Public Class HybridWordEmbeddingsModel
+        Inherits WordEmbeddingsModel
 
-            Public Sub New(ByRef Vocabulary As List(Of String))
-                MyBase.New(Vocabulary)
-            End Sub
-            Public Enum ModelType
-                Skipgram
-                Glove
-                SoftMax
-                CBOW
-                FastText
-            End Enum
-            Public Function PreTrain(ByRef model As WordEmbeddingsModel, ByRef iModelType As ModelType) As WordEmbeddingsModel
-                model.Train()
-                Dim preTrainedModel As WordEmbeddingsModel
+        Public Sub New(ByRef model As WordEmbeddingsModel)
+            MyBase.New(model)
+        End Sub
 
-
-                Select Case iModelType
-                    Case ModelType.Skipgram
-                        preTrainedModel = New WordEmbeddingsWithNegativeSampling(model.Vocabulary)
-                        preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
-
-                        preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
-
-                        Return preTrainedModel
-                    Case ModelType.Glove
-                        preTrainedModel = New WordEmbeddingsWithGloVe(model.Vocabulary)
-                        preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
-
-                        preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
-
-                        Return preTrainedModel
-                    Case ModelType.FastText
-                        preTrainedModel = New WordEmbeddingsWithFastText(model.Vocabulary)
-                        preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
-
-                        preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
-
-                        Return preTrainedModel
-                    Case ModelType.CBOW
-                        preTrainedModel = New WordEmbeddingsWithCBOW(model.Vocabulary)
-                        preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
-
-                        preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
-
-                        Return preTrainedModel
-                    Case ModelType.SoftMax
-                        preTrainedModel = New WordEmbeddingsWithHierarchicalSoftmax(model.Vocabulary)
-                        preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
-
-                        preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
-
-                        Return preTrainedModel
-                End Select
-                Return model
-            End Function
-
-            Public Function FineTune(ByRef Model As WordEmbeddingsModel, ByRef iModelType As ModelType) As WordEmbeddingsModel
-
-                Dim fineTunedModel As WordEmbeddingsModel
-
-                Model.Train()
-
-                Select Case iModelType
-                    Case ModelType.CBOW
-                        fineTunedModel = New WordEmbeddingsWithCBOW(Model.Vocabulary)
-                        fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                        fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
-                        Return fineTunedModel
-                    Case ModelType.FastText
-                        fineTunedModel = New WordEmbeddingsWithFastText(Model.Vocabulary)
-                        fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                        fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
-                        Return fineTunedModel
-                    Case ModelType.Glove
-                        fineTunedModel = New WordEmbeddingsWithGloVe(Model.Vocabulary)
-                        fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                        fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
-                        Return fineTunedModel
-                    Case ModelType.Skipgram
-                        fineTunedModel = New WordEmbeddingsWithNegativeSampling(Model.Vocabulary)
-                        fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                        fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
-                        Return fineTunedModel
-                    Case ModelType.SoftMax
-                        fineTunedModel = New WordEmbeddingsWithHierarchicalSoftmax(Model.Vocabulary)
-                        fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                        fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
-                        Return fineTunedModel
-
-                End Select
+        Public Sub New(ByRef Vocabulary As List(Of String))
+            MyBase.New(Vocabulary)
+        End Sub
+        Public Enum ModelType
+            Skipgram
+            Glove
+            SoftMax
+            CBOW
+            FastText
+        End Enum
+        Public Function PreTrain(ByRef model As WordEmbeddingsModel, ByRef iModelType As ModelType) As WordEmbeddingsModel
+            model.Train()
+            Dim preTrainedModel As WordEmbeddingsModel
 
 
-                Return Model
+            Select Case iModelType
+                Case ModelType.Skipgram
+                    preTrainedModel = New WordEmbeddingsWithNegativeSampling(model.Vocabulary)
+                    preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
 
-            End Function
+                    preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+
+                    Return preTrainedModel
+                Case ModelType.Glove
+                    preTrainedModel = New WordEmbeddingsWithGloVe(model.Vocabulary)
+                    preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
+
+                    preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+
+                    Return preTrainedModel
+                Case ModelType.FastText
+                    preTrainedModel = New WordEmbeddingsWithFastText(model.Vocabulary)
+                    preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
+
+                    preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+
+                    Return preTrainedModel
+                Case ModelType.CBOW
+                    preTrainedModel = New WordEmbeddingsWithCBOW(model.Vocabulary)
+                    preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
+
+                    preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+
+                    Return preTrainedModel
+                Case ModelType.SoftMax
+                    preTrainedModel = New WordEmbeddingsWithHierarchicalSoftmax(model.Vocabulary)
+                    preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs)  ' Set appropriate parameters for pre-training
+
+                    preTrainedModel.Train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+
+                    Return preTrainedModel
+            End Select
+            Return model
+        End Function
+
+        Public Function FineTune(ByRef Model As WordEmbeddingsModel, ByRef iModelType As ModelType) As WordEmbeddingsModel
+
+            Dim fineTunedModel As WordEmbeddingsModel
+
+            Model.Train()
+
+            Select Case iModelType
+                Case ModelType.CBOW
+                    fineTunedModel = New WordEmbeddingsWithCBOW(Model.Vocabulary)
+                    fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+                    fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+                    Return fineTunedModel
+                Case ModelType.FastText
+                    fineTunedModel = New WordEmbeddingsWithFastText(Model.Vocabulary)
+                    fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+                    fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+                    Return fineTunedModel
+                Case ModelType.Glove
+                    fineTunedModel = New WordEmbeddingsWithGloVe(Model.Vocabulary)
+                    fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+                    fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+                    Return fineTunedModel
+                Case ModelType.Skipgram
+                    fineTunedModel = New WordEmbeddingsWithNegativeSampling(Model.Vocabulary)
+                    fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+                    fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+                    Return fineTunedModel
+                Case ModelType.SoftMax
+                    fineTunedModel = New WordEmbeddingsWithHierarchicalSoftmax(Model.Vocabulary)
+                    fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+                    fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+                    Return fineTunedModel
+
+            End Select
 
 
-            Public Overloads Sub Train(Optional PretrainModel As ModelType = ModelType.Skipgram, Optional FineTuneModel As ModelType = ModelType.Glove)
-                Dim hybrid As New HybridWordEmbeddingsModel(Vocabulary)
-                Dim preTrainedModel = PreTrain(hybrid, PretrainModel)
-                Dim fineTunedModel = FineTune(preTrainedModel, FineTuneModel)
-                'set model
-                Me.WordEmbeddings = fineTunedModel.WordEmbeddings
+            Return Model
 
-            End Sub
+        End Function
 
 
-            Public Overrides Sub Train(corpus As List(Of List(Of String)))
-                ' Step 1: Pre-training using Skip-gram with Negative Sampling.
-                Console.WriteLine("Pre-training using Skip-gram with Negative Sampling...")
-                Dim preTrainedModel As New WordEmbeddingsWithNegativeSampling(Vocabulary)
-                preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for pre-training
-                preTrainedModel.Train(corpus) ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+        Public Overloads Sub Train(Optional PretrainModel As ModelType = ModelType.Skipgram, Optional FineTuneModel As ModelType = ModelType.Glove)
+            Dim hybrid As New HybridWordEmbeddingsModel(Vocabulary)
+            Dim preTrainedModel = PreTrain(hybrid, PretrainModel)
+            Dim fineTunedModel = FineTune(preTrainedModel, FineTuneModel)
+            'set model
+            Me.WordEmbeddings = fineTunedModel.WordEmbeddings
+
+        End Sub
 
 
-                ' Step 3: Fine-tuning using Hierarchical Softmax.
-                Console.WriteLine("Fine-tuning using Hierarchical Softmax...")
-                Dim fineTunedModel As New WordEmbeddingsWithHierarchicalSoftmax(Vocabulary)
-                fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                fineTunedModel.Train(corpus) ' Fine-tune the word embeddings using Hierarchical Softmax
-
-                ' Step 4: Set the fine-tuned word embeddings as the model's word embeddings.
-                WordEmbeddings = fineTunedModel.WordEmbeddings
-
-                Console.WriteLine("Training completed!")
-            End Sub
-
-            Public Overrides Sub Train()
-                ' Step 1: Pre-training using Skip-gram with Negative Sampling.
-                Console.WriteLine("Pre-training using Skip-gram with Negative Sampling...")
-                Dim preTrainedModel As New WordEmbeddingsWithNegativeSampling(Vocabulary)
-                preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for pre-training
-                preTrainedModel.train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
+        Public Overrides Sub Train(corpus As List(Of List(Of String)))
+            ' Step 1: Pre-training using Skip-gram with Negative Sampling.
+            Console.WriteLine("Pre-training using Skip-gram with Negative Sampling...")
+            Dim preTrainedModel As New WordEmbeddingsWithNegativeSampling(Vocabulary)
+            preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for pre-training
+            preTrainedModel.Train(corpus) ' Pre-train the word embeddings using Skip-gram with Negative Sampling
 
 
-                ' Step 3: Fine-tuning using Hierarchical Softmax.
-                Console.WriteLine("Fine-tuning using Hierarchical Softmax...")
-                Dim fineTunedModel As New WordEmbeddingsWithHierarchicalSoftmax(Vocabulary)
-                fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
-                fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
+            ' Step 3: Fine-tuning using Hierarchical Softmax.
+            Console.WriteLine("Fine-tuning using Hierarchical Softmax...")
+            Dim fineTunedModel As New WordEmbeddingsWithHierarchicalSoftmax(Vocabulary)
+            fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+            fineTunedModel.Train(corpus) ' Fine-tune the word embeddings using Hierarchical Softmax
 
-                ' Step 4: Set the fine-tuned word embeddings as the model's word embeddings.
-                WordEmbeddings = fineTunedModel.WordEmbeddings
+            ' Step 4: Set the fine-tuned word embeddings as the model's word embeddings.
+            WordEmbeddings = fineTunedModel.WordEmbeddings
 
-                Console.WriteLine("Training completed!")
-            End Sub
+            Console.WriteLine("Training completed!")
+        End Sub
+
+        Public Overrides Sub Train()
+            ' Step 1: Pre-training using Skip-gram with Negative Sampling.
+            Console.WriteLine("Pre-training using Skip-gram with Negative Sampling...")
+            Dim preTrainedModel As New WordEmbeddingsWithNegativeSampling(Vocabulary)
+            preTrainedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for pre-training
+            preTrainedModel.train() ' Pre-train the word embeddings using Skip-gram with Negative Sampling
 
 
-        End Class
+            ' Step 3: Fine-tuning using Hierarchical Softmax.
+            Console.WriteLine("Fine-tuning using Hierarchical Softmax...")
+            Dim fineTunedModel As New WordEmbeddingsWithHierarchicalSoftmax(Vocabulary)
+            fineTunedModel.SetTrainingParameters(EmbeddingSize, WindowSize, LearningRate, NumEpochs) ' Set appropriate parameters for fine-tuning
+            fineTunedModel.Train() ' Fine-tune the word embeddings using Hierarchical Softmax
 
-    End Namespace
-    Namespace Models
+            ' Step 4: Set the fine-tuned word embeddings as the model's word embeddings.
+            WordEmbeddings = fineTunedModel.WordEmbeddings
 
+            Console.WriteLine("Training completed!")
+        End Sub
+
+
+    End Class
+
+End Namespace
+Namespace Models
+    Namespace Text
         ''' <summary>
         '''Skip-gram with Negative Sampling:
         ''' Pros:
@@ -1857,80 +1860,439 @@ Namespace Word2Vectors
         End Class
 
     End Namespace
-    Namespace UseCases
-        Namespace WordEmbeddingsUseCase
-            Public Class WordEmbeddingsExample
-                Public Shared Sub Run()
-                    ' Sample text corpus for training word embeddings.
-                    Dim textCorpus As List(Of String) = New List(Of String) From
-                {
-                    "apple orange banana",
-                    "orange banana grape",
-                    "grape cherry apple",
-                    "apple apple apple",
-                    "cherry banana banana"
-                }
+    Namespace Audio
+        Public Class Audio2Vector
+            Public Shared Function AudioToVector(audioSignal As Double(), windowSize As Integer, hopSize As Integer) As List(Of Complex())
+                Dim vectors As New List(Of Complex())
 
-                    ' Create a custom vocabulary from the text corpus.
-                    Dim vocabulary As List(Of String) = textCorpus.SelectMany(Function(sentence) sentence.Split()).Distinct().ToList()
+                For i As Integer = 0 To audioSignal.Length - windowSize Step hopSize
+                    Dim window(windowSize - 1) As Complex
 
-                    ' Create a WordEmbeddingsModel and train it with the text corpus.
-                    Dim wordEmbeddingsModel As New HybridWordEmbeddingsModel(vocabulary)
-                    wordEmbeddingsModel.Train()
+                    For j As Integer = 0 To windowSize - 1
+                        window(j) = audioSignal(i + j)
+                    Next
 
-                    ' Get the word vector for a specific word.
-                    Dim word As String = "apple"
-                    Dim wordVector As Double() = wordEmbeddingsModel.WordEmbeddings.GetVector(word)
+                    Dim spectrum As Complex() = CalculateSpectrum(window)
+                    vectors.Add(spectrum)
+                Next
 
+                Return vectors
+            End Function
+            Public Shared Function VectorToAudio(vectors As List(Of Complex()), hopSize As Integer) As Double()
+                Dim audioSignal As New List(Of Double)()
 
-                    ' Calculate the cosine similarity between two words.
-                    Dim word1 As String = "apple"
-                    Dim word2 As String = "orange"
-                    Dim similarity As Double = wordEmbeddingsModel.CosineSimilarity(word1, word2, wordEmbeddingsModel.WordEmbeddings)
+                For Each spectrum As Complex() In vectors
+                    Dim windowSignal As Double() = CalculateInverseSpectrum(spectrum)
 
-                    ' Display the word vector and similarity result.
-                    Console.WriteLine($"Word Vector for '{word}': {String.Join(", ", wordVector)}")
-                    Console.WriteLine($"Cosine Similarity between '{word1}' and '{word2}': {similarity}")
-                End Sub
-            End Class
-        End Namespace
-        Namespace WordEmbeddingsUseCase
-            Public Class HybridWordEmbeddingsExample
-                Public Shared Sub Run()
-                    ' Sample text corpus for training word embeddings.
-                    Dim textCorpus As List(Of String) = New List(Of String) From
-                {
-                    "apple orange banana",
-                    "orange banana grape",
-                    "grape cherry apple",
-                    "apple apple apple",
-                    "cherry banana banana"
-                }
+                    For i As Integer = 0 To hopSize - 1
+                        If audioSignal.Count + i < windowSignal.Length Then
+                            audioSignal.Add(windowSignal(i))
+                        End If
+                    Next
+                Next
 
-                    ' Create a custom vocabulary from the text corpus.
-                    Dim vocabulary As List(Of String) = textCorpus.SelectMany(Function(sentence) sentence.Split()).Distinct().ToList()
+                Return audioSignal.ToArray()
+            End Function
+            Public Shared Function VectorToAudio(vectors As List(Of Complex()), windowSize As Integer, hopSize As Integer) As Double()
+                Dim audioSignal As New List(Of Double)()
 
-                    ' Create the hybrid word embeddings model.
-                    Dim hybridModel As New HybridWordEmbeddingsModel(vocabulary)
+                ' Initialize a buffer to accumulate audio segments
+                Dim buffer(audioSignal.Count + windowSize - 1) As Double
 
-                    ' Train the hybrid model using the two-step training process.
-                    hybridModel.Train()
+                For Each spectrum As Complex() In vectors
+                    Dim windowSignal As Double() = CalculateInverseSpectrum(spectrum)
 
-                    ' Get the word vector for a specific word after training.
-                    Dim word As String = "apple"
-                    Dim wordVector As Double() = hybridModel.WordEmbeddings.GetVector(word)
+                    For i As Integer = 0 To hopSize - 1
+                        If audioSignal.Count + i < windowSignal.Length Then
+                            ' Add the current window to the buffer
+                            buffer(audioSignal.Count + i) += windowSignal(i)
+                        End If
+                    Next
 
-                    ' Calculate the cosine similarity between two words after training.
-                    Dim word1 As String = "apple"
-                    Dim word2 As String = "orange"
-                    Dim similarity As Double = hybridModel.CosineSimilarity(word1, word2, hybridModel.WordEmbeddings)
+                    ' Check if there's enough data in the buffer to generate a full segment
+                    While buffer.Length >= hopSize
+                        ' Extract a segment from the buffer and add to the audio signal
+                        Dim segment(hopSize - 1) As Double
+                        Array.Copy(buffer, segment, hopSize)
+                        audioSignal.AddRange(segment)
 
-                    ' Display the word vector and similarity result after training.
-                    Console.WriteLine($"Word Vector for '{word}' after training: {String.Join(", ", wordVector)}")
-                    Console.WriteLine($"Cosine Similarity between '{word1}' and '{word2}' after training: {similarity}")
-                End Sub
-            End Class
-        End Namespace
+                        ' Shift the buffer by hopSize
+                        Dim newBuffer(buffer.Length - hopSize - 1) As Double
+                        Array.Copy(buffer, hopSize, newBuffer, 0, newBuffer.Length)
+                        buffer = newBuffer
+                    End While
+                Next
+
+                ' Convert the remaining buffer to audio
+                audioSignal.AddRange(buffer)
+
+                Return audioSignal.ToArray()
+            End Function
+            Public Shared Function LoadAudio(audioPath As String) As Double()
+                Dim audioData As New List(Of Double)()
+
+                ' Use NAudio or other library to load audio data from the specified audioPath
+                Using reader As New NAudio.Wave.AudioFileReader(audioPath)
+                    Dim buffer(reader.WaveFormat.SampleRate * reader.WaveFormat.Channels - 1) As Single
+                    While reader.Read(buffer, 0, buffer.Length) > 0
+                        For Each sample As Single In buffer
+                            audioData.Add(CDbl(sample))
+                        Next
+                    End While
+                End Using
+
+                Return audioData.ToArray()
+            End Function
+            Public Shared Sub SaveAudio(audioSignal As Double(), outputPath As String)
+                ' Convert the array of doubles to an array of singles for NAudio
+                Dim audioData(audioSignal.Length - 1) As Single
+                For i As Integer = 0 To audioSignal.Length - 1
+                    audioData(i) = CSng(audioSignal(i))
+                Next
+
+                ' Use NAudio or other library to save audio data to the specified outputPath
+                Using writer As New NAudio.Wave.WaveFileWriter(outputPath, New NAudio.Wave.WaveFormat())
+                    writer.WriteSamples(audioData, 0, audioData.Length)
+                End Using
+            End Sub
+            Private Shared Function CalculateInverseSpectrum(spectrum As Complex()) As Double()
+                ' Perform inverse FFT using MathNet.Numerics library
+                Fourier.Inverse(spectrum, FourierOptions.Default)
+
+                ' Return the real part of the inverse spectrum as the reconstructed signal
+                Dim reconstructedSignal(spectrum.Length - 1) As Double
+                For i As Integer = 0 To spectrum.Length - 1
+                    reconstructedSignal(i) = spectrum(i).Real
+                Next
+                Return reconstructedSignal
+            End Function
+            Private Shared Function CalculateSpectrum(window As Complex()) As Complex()
+                ' Perform FFT using MathNet.Numerics library
+                Fourier.Forward(window, FourierOptions.Default)
+
+                Return window
+            End Function
+        End Class
     End Namespace
-End Namespace
+    Namespace Images
+        Public Class Image2Vector
+            Public Shared Sub SaveVectorToFile(imgVector As Double(), outputPath As String)
+                Using writer As New System.IO.StreamWriter(outputPath)
+                    For Each value As Double In imgVector
+                        writer.WriteLine(value)
+                    Next
+                End Using
+            End Sub
 
+            Public Class ImageDecoder
+                Public Sub DecodeImage(imgVector As Double(), width As Integer, height As Integer, outputPath As String)
+                    Dim decodedImage As New Bitmap(width, height)
+
+                    Dim index As Integer = 0
+                    For y As Integer = 0 To height - 1
+                        For x As Integer = 0 To width - 1
+                            Dim grayscaleValue As Integer = CInt(Math.Floor(imgVector(index) * 255))
+                            Dim pixelColor As Color = Color.FromArgb(grayscaleValue, grayscaleValue, grayscaleValue)
+                            decodedImage.SetPixel(x, y, pixelColor)
+                            index += 1
+                        Next
+                    Next
+
+                    decodedImage.Save(outputPath, Imaging.ImageFormat.Jpeg)
+                End Sub
+            End Class
+
+            Public Class ImageEncoder
+                Public Function EncodeImage(imagePath As String, width As Integer, height As Integer) As Double()
+                    Dim resizedImage As Bitmap = ResizeImage(imagePath, width, height)
+                    Dim grayscaleImage As Bitmap = ConvertToGrayscale(resizedImage)
+                    Dim pixelValues As Double() = GetPixelValues(grayscaleImage)
+                    Return pixelValues
+                End Function
+
+                Private Function ConvertToGrayscale(image As Bitmap) As Bitmap
+                    Dim grayscaleImage As New Bitmap(image.Width, image.Height, PixelFormat.Format8bppIndexed)
+                    Using g As Graphics = Graphics.FromImage(grayscaleImage)
+                        Dim colorMatrix As ColorMatrix = New ColorMatrix(New Single()() {
+                New Single() {0.299F, 0.299F, 0.299F, 0, 0},
+                New Single() {0.587F, 0.587F, 0.587F, 0, 0},
+                New Single() {0.114F, 0.114F, 0.114F, 0, 0},
+                New Single() {0, 0, 0, 1, 0},
+                New Single() {0, 0, 0, 0, 1}
+            })
+                        Dim attributes As ImageAttributes = New ImageAttributes()
+                        attributes.SetColorMatrix(colorMatrix)
+                        g.DrawImage(image, New Rectangle(0, 0, image.Width, image.Height), 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes)
+                    End Using
+                    Return grayscaleImage
+                End Function
+
+                Private Function GetPixelValues(image As Bitmap) As Double()
+                    Dim pixelValues As New List(Of Double)()
+                    For y As Integer = 0 To image.Height - 1
+                        For x As Integer = 0 To image.Width - 1
+                            Dim pixelColor As Color = image.GetPixel(x, y)
+                            Dim grayscaleValue As Double = pixelColor.R / 255.0
+                            pixelValues.Add(grayscaleValue)
+                        Next
+                    Next
+                    Return pixelValues.ToArray()
+                End Function
+
+                Private Function ResizeImage(imagePath As String, width As Integer, height As Integer) As Bitmap
+                    Dim originalImage As Bitmap = New Bitmap(imagePath)
+                    Dim resizedImage As Bitmap = New Bitmap(width, height)
+                    Using g As Graphics = Graphics.FromImage(resizedImage)
+                        g.DrawImage(originalImage, 0, 0, width, height)
+                    End Using
+                    Return resizedImage
+                End Function
+            End Class
+
+            Public Class ImageSearch
+                Public Function FindSimilarImages(queryVector As Double(), imageVectors As List(Of Tuple(Of String, Double())), numResults As Integer) As List(Of String)
+                    Dim similarImages As New List(Of String)()
+
+                    For Each imageVectorPair As Tuple(Of String, Double()) In imageVectors
+                        Dim imageName As String = imageVectorPair.Item1
+                        Dim imageVector As Double() = imageVectorPair.Item2
+
+                        Dim distance As Double = CalculateEuclideanDistance(queryVector, imageVector)
+                        similarImages.Add(imageName)
+                    Next
+
+                    similarImages.Sort() ' Sort the list of similar image names
+
+                    Return similarImages.Take(numResults).ToList()
+                End Function
+
+
+
+                Private Function CalculateEuclideanDistance(vector1 As Double(), vector2 As Double()) As Double
+                    Dim sumSquaredDifferences As Double = 0
+                    For i As Integer = 0 To vector1.Length - 1
+                        Dim difference As Double = vector1(i) - vector2(i)
+                        sumSquaredDifferences += difference * difference
+                    Next
+                    Return Math.Sqrt(sumSquaredDifferences)
+                End Function
+            End Class
+        End Class
+    End Namespace
+
+
+End Namespace
+Namespace EncoderDecoders
+    ''' <summary>
+    ''' Encoding:
+    ''' EncodeTokenStr: Encodes a String token And returns its positional embedding As a list Of doubles.
+    '''    EncodeTokenEmbedding: Encodes a token embedding (list Of doubles) And returns its positional embedding As a list Of doubles.
+    '''    EncodeSentenceStr: Encodes a list Of String tokens And returns their positional embeddings As a list Of lists Of doubles.
+    '''    EncodeSentenceEmbedding: Encodes a list Of token embeddings And returns their positional embeddings As a list Of lists Of doubles.
+    '''Decoding:
+    '''DecodeTokenStr: Decodes a positional embedding (list Of doubles) And returns the corresponding String token.
+    '''    DecodeTokenEmbedding: Decodes a positional embedding (list Of doubles) And returns the corresponding token embedding As a list Of doubles.
+    '''    DecodeSentenceStr: Decodes a list Of positional embeddings And returns the corresponding String tokens As a list Of strings.
+    '''    DecodeSentenceEmbedding: Decodes a list Of positional embeddings And returns the corresponding token embeddings As a list Of lists Of doubles.
+    '''     </summary>
+    Public Class PositionalEncoderDecoder
+        Private encodingMatrix As List(Of List(Of Double))
+        Private Vocabulary As New List(Of String)
+
+        ''' <summary>
+        ''' 
+        ''' </summary>
+        ''' <param name="Dmodel">Embedding Model Size 
+        ''' (1. often best to use the Vocabulary D_model)
+        ''' (2. often a Fixed 512 is used LLM)
+        ''' (3: 64 SMall LLM) </param>
+        ''' <param name="MaxSeqLength">Max Sentence Length</param>
+        ''' <param name="vocabulary">Known VocabularyList</param>
+        Public Sub New(ByRef Dmodel As Integer, MaxSeqLength As Integer, vocabulary As List(Of String))
+            '1. Create Embedding Matrix  Dmodel * MaxSeqLength
+            CreateEmbeddingMatrix(Dmodel, MaxSeqLength)
+            '2. Set Reference Vocabulary
+            Me.Vocabulary = vocabulary
+        End Sub
+
+        'Encode
+        Public Function EncodeTokenStr(ByRef nToken As String) As List(Of Double)
+            Dim positionID As Integer = GetTokenIndex(nToken)
+            Return If(positionID <> -1, encodingMatrix(positionID), New List(Of Double)())
+        End Function
+
+        Public Function EncodeTokenEmbedding(ByRef TokenEmbedding As List(Of Double)) As List(Of Double)
+            Dim positionID As Integer = GetTokenIndex(TokenEmbedding)
+            Return If(positionID <> -1, encodingMatrix(positionID), New List(Of Double)())
+        End Function
+        Public Function EncodeSentenceStr(ByRef Sentence As List(Of String)) As List(Of List(Of Double))
+            Dim EncodedSentence As New List(Of List(Of Double))
+            For Each Word In Sentence
+
+                EncodedSentence.Add(EncodeTokenStr(Word))
+            Next
+            Return EncodedSentence
+        End Function
+        Public Function EncodeSentenceEmbedding(ByRef SentenceEmbeddings As List(Of List(Of Double))) As List(Of List(Of Double))
+            Dim EncodedSentence As New List(Of List(Of Double))
+            For Each Word In SentenceEmbeddings
+
+                EncodedSentence.Add(EncodeTokenEmbedding(Word))
+            Next
+            Return EncodedSentence
+        End Function
+
+        'Decode
+        Public Function DecodeSentenceStr(ByRef Sentence As List(Of List(Of Double))) As List(Of String)
+            Dim DecodedSentence As New List(Of String)
+            For Each Word In Sentence
+
+                DecodedSentence.Add(DecodeTokenStr(Word))
+            Next
+            Return DecodedSentence
+        End Function
+        Public Function DecodeSentenceEmbedding(ByRef Sentence As List(Of List(Of Double))) As List(Of List(Of Double))
+            Dim DecodedSentence As New List(Of List(Of Double))
+            For Each Word In Sentence
+
+                DecodedSentence.Add(DecodeTokenEmbedding(Word))
+            Next
+            Return DecodedSentence
+        End Function
+        ''' <summary>
+        ''' Used For String Tokens
+        ''' </summary>
+        ''' <param name="PositionalEmbeddingVector"></param>
+        ''' <returns>String Token</returns>
+        Public Function DecodeTokenStr(ByRef PositionalEmbeddingVector As List(Of Double)) As String
+            Dim positionID As Integer = GetPositionID(PositionalEmbeddingVector)
+            Return If(positionID <> -1, Vocabulary(positionID), "")
+        End Function
+        ''' <summary>
+        ''' USed to decode WOrdEMbedding Vectors instead of strings
+        ''' </summary>
+        ''' <param name="PositionalEmbeddingVector"></param>
+        ''' <returns>WOrdEMbedding Vector</returns>
+        Public Function DecodeTokenEmbedding(ByRef PositionalEmbeddingVector As List(Of Double)) As List(Of Double)
+            Dim positionID As Integer = GetPositionID(PositionalEmbeddingVector)
+            Return If(positionID <> -1, encodingMatrix(positionID), New List(Of Double)())
+        End Function
+
+
+
+        Private Sub CreateEmbeddingMatrix(ByRef WidthLength As Integer, HeightLength As Integer)
+            encodingMatrix = New List(Of List(Of Double))
+            ' Create the encoding matrix
+            For pos As Integer = 0 To HeightLength - 1
+                Dim encodingRow As List(Of Double) = New List(Of Double)()
+
+                For i As Integer = 0 To WidthLength - 1
+                    Dim angle As Double = pos / Math.Pow(10000, (2 * i) / WidthLength)
+                    encodingRow.Add(Math.Sin(angle))
+                    encodingRow.Add(Math.Cos(angle))
+                Next
+
+                encodingMatrix.Add(encodingRow)
+            Next
+        End Sub
+        'GetPos
+        Private Function GetPositionID(PositionalEmbeddingVector As List(Of Double)) As Integer
+            For i As Integer = 0 To encodingMatrix.Count - 1
+                If PositionalEmbeddingVector.SequenceEqual(encodingMatrix(i)) Then
+                    Return i
+                End If
+            Next
+
+            Return -1 ' Position ID not found
+        End Function
+        Private Function GetTokenIndex(PositionalEncoding As List(Of Double)) As Integer
+
+            For i As Integer = 0 To encodingMatrix.Count - 1
+                If PositionalEncoding.SequenceEqual(encodingMatrix(i)) Then
+                    Return i
+                End If
+            Next
+
+            Return -1 ' Token not found
+        End Function
+        Private Function GetTokenIndex(token As String) As Integer
+
+            Return Vocabulary.IndexOf(token)
+        End Function
+    End Class
+
+
+End Namespace
+Namespace Examples
+
+    Public Class WordEmbeddingsExample
+        Public Shared Sub Run()
+            ' Sample text corpus for training word embeddings.
+            Dim textCorpus As List(Of String) = New List(Of String) From
+            {
+                "apple orange banana",
+                "orange banana grape",
+                "grape cherry apple",
+                "apple apple apple",
+                "cherry banana banana"
+            }
+
+            ' Create a custom vocabulary from the text corpus.
+            Dim vocabulary As List(Of String) = textCorpus.SelectMany(Function(sentence) sentence.Split()).Distinct().ToList()
+
+            ' Create a WordEmbeddingsModel and train it with the text corpus.
+            Dim wordEmbeddingsModel As New HybridWordEmbeddingsModel(vocabulary)
+            wordEmbeddingsModel.Train()
+
+            ' Get the word vector for a specific word.
+            Dim word As String = "apple"
+            Dim wordVector As Double() = wordEmbeddingsModel.WordEmbeddings.GetVector(word)
+
+
+            ' Calculate the cosine similarity between two words.
+            Dim word1 As String = "apple"
+            Dim word2 As String = "orange"
+            Dim similarity As Double = wordEmbeddingsModel.CosineSimilarity(word1, word2, wordEmbeddingsModel.WordEmbeddings)
+
+            ' Display the word vector and similarity result.
+            Console.WriteLine($"Word Vector for '{word}': {String.Join(", ", wordVector)}")
+            Console.WriteLine($"Cosine Similarity between '{word1}' and '{word2}': {similarity}")
+        End Sub
+    End Class
+
+    Public Class HybridWordEmbeddingsExample
+        Public Shared Sub Run()
+            ' Sample text corpus for training word embeddings.
+            Dim textCorpus As List(Of String) = New List(Of String) From
+            {
+                "apple orange banana",
+                "orange banana grape",
+                "grape cherry apple",
+                "apple apple apple",
+                "cherry banana banana"
+            }
+
+            ' Create a custom vocabulary from the text corpus.
+            Dim vocabulary As List(Of String) = textCorpus.SelectMany(Function(sentence) sentence.Split()).Distinct().ToList()
+
+            ' Create the hybrid word embeddings model.
+            Dim hybridModel As New HybridWordEmbeddingsModel(vocabulary)
+
+            ' Train the hybrid model using the two-step training process.
+            hybridModel.Train()
+
+            ' Get the word vector for a specific word after training.
+            Dim word As String = "apple"
+            Dim wordVector As Double() = hybridModel.WordEmbeddings.GetVector(word)
+
+            ' Calculate the cosine similarity between two words after training.
+            Dim word1 As String = "apple"
+            Dim word2 As String = "orange"
+            Dim similarity As Double = hybridModel.CosineSimilarity(word1, word2, hybridModel.WordEmbeddings)
+
+            ' Display the word vector and similarity result after training.
+            Console.WriteLine($"Word Vector for '{word}' after training: {String.Join(", ", wordVector)}")
+            Console.WriteLine($"Cosine Similarity between '{word1}' and '{word2}' after training: {similarity}")
+        End Sub
+    End Class
+End Namespace
